@@ -21,11 +21,21 @@ build/
 .env.local
 .env.*.local
 **/.env
+**/swaralaya-live-data.json
+**/swaralaya-smtp-config.json
+**/*smtp*config*.json
+*.wpress
 
 # Uploads
 uploads/*
 !uploads/.gitkeep
 **/uploads/*
+
+# Local deployment backups and verification artifacts
+.codex-backups/
+**/.codex-backups/
+backup-before-*.json
+*.tmp
 
 # IDE and OS files
 .vscode/

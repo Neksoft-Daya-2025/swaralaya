@@ -61,6 +61,11 @@
 
 ```
 swaralaya/
+├── live-deployment/                       # Current live deployment package
+│   ├── site-content-client.js             # Public website renderer
+│   ├── api/index.php                      # PHP API bridge for live hosting
+│   ├── admin/swaralaya-admin-app.html     # Admin portal shell
+│   └── assets/                            # Logo, favicon, and loader assets
 ├── swaralaya updated/
 │   └── TaniskaProjectsqlChanged/
 │       ├── src/                            # Frontend React Source Code
@@ -95,6 +100,14 @@ swaralaya/
 │       └── vite.config.js                  # Vite bundler configuration
 └── README.md                               # Project documentation
 ```
+
+---
+
+## 🌍 Current Live Deployment Package
+
+The `live-deployment/` folder contains the latest production-aligned Swaralaya website package used for shared hosting deployments. It includes the public website client, PHP API bridge, admin shell, responsive fixes, Swaralaya branding assets, favicon, and the first-home-load logo animation.
+
+Real SMTP credentials and live data are intentionally excluded from Git. Use `live-deployment/api/swaralaya-live-data.example.json` as the safe configuration shape for server setup.
 
 ---
 

@@ -1,0 +1,31 @@
+{
+  "settings": {
+    "brand": {
+      "name": "Swaralaya School of Music",
+      "email": "info@swaralayaschoolofmusic.nl",
+      "phone": "+31 6428 25268",
+      "address": "J J Slauerhoffstraat 63, 1321RA Almere, Netherlands"
+    },
+    "smtp": {
+      "host": "smtp.hostinger.com",
+      "port": 587,
+      "secure": false,
+      "username": "info@swaralayaschoolofmusic.nl",
+      "fromEmail": "info@swaralayaschoolofmusic.nl",
+      "fromName": "Swaralaya School of Music"
+    }
+  },
+  "admin": {
+    "email": "info@swaralayaschoolofmusic.nl",
+    "password": "CHANGE_ME_ON_SERVER",
+    "developer_key": "CHANGE_ME_ON_SERVER",
+    "token_salt": "CHANGE_ME_ON_SERVER"
+  },
+  "blogs": [],
+  "events": [],
+  "gallery": [],
+  "contacts": [],
+  "enrollments": [],
+  "bookings": [],
+  "notifications": []
+}
