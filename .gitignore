@@ -36,6 +36,7 @@ uploads/*
 **/.codex-backups/
 backup-before-*.json
 *.tmp
+server-code-staging-*/
 
 # IDE and OS files
 .vscode/

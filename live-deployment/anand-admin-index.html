@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="canonical" href="https://www.swaralayaschoolofmusic.nl/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Swaralaya School of Music | Admin Portal</title>
+    <meta name="description" content="Swaralaya School of Music administration portal." />
+    <meta property="og:title" content="Swaralaya School of Music | Admin Portal" />
+    <meta property="og:description" content="Swaralaya School of Music administration portal." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.swaralayaschoolofmusic.nl/" />
+    <meta property="og:image" content="https://www.swaralayaschoolofmusic.nl/swaralaya-main-logo.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Swaralaya School of Music | Admin Portal" />
+    <meta name="twitter:description" content="Swaralaya School of Music administration portal." />
+    <meta name="twitter:image" content="https://www.swaralayaschoolofmusic.nl/swaralaya-main-logo.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Swaralaya School of Music",
+        "url": "https://www.swaralayaschoolofmusic.nl/",
+        "logo": "https://www.swaralayaschoolofmusic.nl/swaralaya-main-logo.png",
+        "description": "Swaralaya School of Music administration portal.",
+        "sameAs": [
+          "https://www.swaralayaschoolofmusic.nl/"
+        ]
+      }
+    </script>
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/prata.woff2" crossorigin />
+    <link
+      rel="preload"
+      as="image"
+      type="image/avif"
+      href="/Hero section/durga-maa-1-1024.avif"
+      imagesrcset="/Hero%20section/durga-maa-1-640.avif 640w, /Hero%20section/durga-maa-1-1024.avif 1024w, /Hero%20section/durga-maa-1-1600.avif 1600w"
+      imagesizes="100vw"
+      fetchpriority="high"
+    />
+    <script type="importmap">{"imports":{"/assets/BlogPage-BiuxaSSa.js":"/assets/BlogPage-BiuxaSSa.js?v=20260930160500"}}</script>
+    <script type="module" crossorigin src="/assets/index-BBICVZ-s.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/react-vendor-IJ6URUR9.js">
+    <link rel="modulepreload" crossorigin href="/assets/radix-BHwFKyaY.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-CykkUmHS.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.setTimeout(function () {
+        var root = document.getElementById("root");
+        if (!root || root.childElementCount > 0) return;
+        try {
+          var key = "swaralaya_empty_root_refresh_done";
+          if (sessionStorage.getItem(key)) {
+            sessionStorage.removeItem(key);
+            return;
+          }
+          sessionStorage.setItem(key, "1");
+          if ("caches" in window) {
+            caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (name) { return caches.delete(name); }));
+            }).finally(function () {
+              location.replace(location.pathname + "?fresh=" + Date.now());
+            });
+          } else {
+            location.replace(location.pathname + "?fresh=" + Date.now());
+          }
+        } catch (err) {
+          location.replace(location.pathname + "?fresh=" + Date.now());
+        }
+      }, 2500);
+    </script>
+  </body>
+</html>

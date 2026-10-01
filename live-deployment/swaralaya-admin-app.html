@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Swaralaya School of Music | Admin Portal</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="shortcut icon" type="image/png" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style>
+      :root {
+        --brown: #733626;
+        --brown-dark: #431910;
+        --green: #16321e;
+        --ink: #231713;
+        --muted: #71645f;
+        --line: #eadfd9;
+        --soft: #f8f4f1;
+        --white: #fff;
+        --danger: #b42318;
+        --ok: #087443;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #fbfaf8;
+        color: var(--ink);
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+      }
+
+      button, input, select, textarea { font: inherit; }
+      button { cursor: pointer; }
+
+      .login-wrap {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .login-card {
+        width: min(430px, 100%);
+        background: var(--white);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: 0 24px 70px rgba(69, 31, 20, .14);
+        padding: 34px;
+      }
+
+      .login-card img {
+        display: block;
+        width: 220px;
+        margin: 0 auto 24px;
+      }
+
+      .login-card h1 {
+        margin: 0;
+        text-align: center;
+        font-size: 26px;
+      }
+
+      .login-card p {
+        margin: 8px 0 22px;
+        text-align: center;
+        color: var(--muted);
+      }
+
+      label {
+        display: block;
+        margin: 12px 0 7px;
+        font-weight: 700;
+        font-size: 13px;
+      }
+
+      input, select, textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fff;
+        color: var(--ink);
+        outline: none;
+      }
+
+      input, select { height: 44px; padding: 0 12px; }
+      textarea { min-height: 94px; padding: 12px; resize: vertical; }
+      input:focus, select:focus, textarea:focus { border-color: var(--brown); box-shadow: 0 0 0 3px rgba(115, 54, 38, .12); }
+
+      .btn {
+        border: 1px solid var(--brown);
+        border-radius: 9px;
+        background: var(--brown);
+        color: #fff;
+        min-height: 42px;
+        padding: 0 16px;
+        font-weight: 800;
+      }
+
+      .btn.secondary { background: #fff; color: var(--brown); }
+      .btn.ghost { border-color: transparent; background: transparent; color: var(--brown); }
+      .btn.danger { border-color: var(--danger); background: var(--danger); }
+      .btn:disabled { opacity: .65; cursor: wait; }
+
+      .error {
+        display: none;
+        margin-top: 12px;
+        color: var(--danger);
+        text-align: center;
+        font-weight: 700;
+      }
+
+      .app {
+        display: none;
+        min-height: 100vh;
+        grid-template-columns: 290px 1fr;
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        background: #fff;
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .brand {
+        height: 118px;
+        display: flex;
+        align-items: center;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand img { width: 190px; height: auto; }
+
+      .nav {
+        display: grid;
+        gap: 8px;
+        padding: 20px;
+      }
+
+      .nav button {
+        width: 100%;
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: #403530;
+        padding: 0 14px;
+        text-align: left;
+        font-weight: 750;
+      }
+
+      .nav button.active {
+        background: #eee8e3;
+        color: var(--brown);
+      }
+
+      .sidebar-footer {
+        margin-top: auto;
+        padding: 20px;
+        border-top: 1px solid var(--line);
+      }
+
+      .main {
+        min-width: 0;
+      }
+
+      .topbar {
+        height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 0 34px;
+        border-bottom: 1px solid var(--line);
+        background: #fff;
+      }
+
+      .content {
+        padding: 34px;
+      }
+
+      .page-title {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 24px;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 34px;
+        color: var(--brown);
+        letter-spacing: 0;
+      }
+
+      .lede {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .card, .panel {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(62, 33, 24, .05);
+      }
+
+      .stat {
+        min-height: 150px;
+        padding: 22px;
+      }
+
+      .stat .label {
+        color: #81746f;
+        font-size: 13px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .stat .value {
+        margin-top: 24px;
+        font-size: 42px;
+        font-weight: 900;
+        color: var(--brown);
+      }
+
+      .panel { padding: 22px; margin-top: 20px; }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+
+      .toolbar input { max-width: 420px; }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th, td {
+        border-bottom: 1px solid var(--line);
+        padding: 14px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        color: #756a65;
+        font-size: 13px;
+        text-transform: uppercase;
+      }
+
+      tr:last-child td { border-bottom: 0; }
+      .muted { color: var(--muted); }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: 999px;
+        padding: 0 10px;
+        background: #eef8f0;
+        color: var(--ok);
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .full { grid-column: 1 / -1; }
+      .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .notice {
+        border: 1px solid #f1d8ba;
+        background: #fff8ee;
+        color: #65351f;
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin-bottom: 16px;
+      }
+
+      @media (max-width: 980px) {
+        .app { grid-template-columns: 1fr; }
+        .sidebar { position: static; height: auto; }
+        .nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .form-grid { grid-template-columns: 1fr; }
+      }
+
+      @media (max-width: 640px) {
+        .topbar, .content { padding-left: 18px; padding-right: 18px; }
+        .grid, .nav { grid-template-columns: 1fr; }
+        h2 { font-size: 28px; }
+        table { font-size: 14px; }
+      }
+    </style>
+  </head>
+  <body>
+    <section id="login" class="login-wrap">
+      <form class="login-card" id="login-form">
+        <img src="/swaralaya-main-logo.png" alt="Swaralaya School of Music" />
+        <h1>Admin Portal</h1>
+        <p>Swaralaya content, events, bookings, and email settings.</p>
+        <label for="email">Email</label>
+        <input id="email" type="email" value="admin@example.com" autocomplete="username" required />
+        <label for="password">Password</label>
+        <input id="password" type="password" value="secret" autocomplete="current-password" required />
+        <button class="btn" id="login-btn" type="submit">Sign In</button>
+        <div class="error" id="login-error">Login failed. Check email/password or internet connection.</div>
+      </form>
+    </section>
+
+    <section id="app" class="app">
+      <aside class="sidebar">
+        <div class="brand"><img src="/swaralaya-main-logo.png" alt="Swaralaya School of Music" /></div>
+        <nav class="nav" id="nav"></nav>
+        <div class="sidebar-footer">
+          <button class="btn secondary" style="width:100%" id="logout-btn">Log Out</button>
+        </div>
+      </aside>
+      <main class="main">
+        <header class="topbar">
+          <strong>Swaralaya Admin</strong>
+          <span class="muted" id="backend-status">Checking backend...</span>
+        </header>
+        <div class="content" id="content"></div>
+      </main>
+    </section>
+
+    <script>
+      const pages = [
+        ['dashboard', 'Dashboard'],
+        ['events', 'Events'],
+        ['bookings', 'Bookings'],
+        ['blogs', 'Blogs'],
+        ['contacts', 'Contacts'],
+        ['content', 'Content Manager'],
+        ['smtp', 'SMTP Settings'],
+      ];
+
+      const state = {
+        token: localStorage.getItem('anandadhara_admin_token') || localStorage.getItem('adminToken') || '',
+        events: [],
+        bookings: [],
+        blogs: [],
+        contacts: [],
+        siteContent: null,
+        smtp: null,
+      };
+
+      const $ = (selector) => document.querySelector(selector);
+      const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char]));
+      const pickArray = (payload) => Array.isArray(payload) ? payload : (payload?.data || payload?.items || payload?.bookings || []);
+      const pickToken = (payload) => payload?.token || payload?.accessToken || payload?.data?.token || payload?.data?.accessToken;
+      const fmtDate = (value) => value ? new Date(value).toLocaleString() : '-';
+
+      async function api(path, options = {}) {
+        const headers = { ...(options.headers || {}) };
+        if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+        if (state.token) headers.Authorization = `Bearer ${state.token}`;
+        const response = await fetch(path, { ...options, headers, cache: 'no-store' });
+        const text = await response.text();
+        let payload = {};
+        try { payload = text ? JSON.parse(text) : {}; } catch { throw new Error(`Invalid response from ${path}`); }
+        if (!response.ok) throw new Error(payload.message || `Request failed: ${response.status}`);
+        return payload;
+      }
+
+      async function loadAll() {
+        const requests = [
+          api('/api/backend/status').catch((error) => ({ error })),
+          api('/api/v1/events?all=true').catch((error) => ({ error })),
+          api('/api/v1/bookings?limit=50').catch((error) => ({ error })),
+          api('/api/v1/blog?per_page=50').catch((error) => ({ error })),
+          api('/api/v1/contact').catch((error) => ({ error })),
+          api('/api/site-content').catch((error) => ({ error })),
+          api('/api/smtp-config').catch((error) => ({ error })),
+        ];
+        const [status, events, bookings, blogs, contacts, siteContent, smtp] = await Promise.all(requests);
+        $('#backend-status').textContent = status.error ? 'Backend check failed' : 'Backend connected';
+        state.events = events.error ? [] : pickArray(events);
+        state.bookings = bookings.error ? [] : pickArray(bookings);
+        state.blogs = blogs.error ? [] : pickArray(blogs);
+        state.contacts = contacts.error ? [] : pickArray(contacts);
+        state.siteContent = siteContent.error ? { logoUrl: '/swaralaya-logo-hd.png', textRules: [], htmlRules: [], imageRules: [], linkRules: [] } : siteContent;
+        state.smtp = smtp.error ? {} : smtp;
+      }
+
+      function showApp() {
+        $('#login').style.display = 'none';
+        $('#app').style.display = 'grid';
+        renderNav();
+      }
+
+      function renderNav() {
+        const active = location.pathname.split('/').pop() || 'dashboard';
+        $('#nav').innerHTML = pages.map(([key, label]) => `<button class="${active === key ? 'active' : ''}" data-page="${key}">${label}</button>`).join('');
+        document.querySelectorAll('#nav button').forEach((button) => {
+          button.addEventListener('click', () => {
+            history.pushState({}, '', `/admin/${button.dataset.page}`);
+            render();
+          });
+        });
+      }
+
+      function pageTitle(title, lede, action = '') {
+        return `<div class="page-title"><div><h2>${title}</h2><p class="lede">${lede}</p></div>${action}</div>`;
+      }
+
+      function renderDashboard() {
+        return `${pageTitle('Overview Dashboard', 'Manage Swaralaya events, bookings, blogs, messages, and frontend content.')}
+          <section class="grid">
+            <div class="card stat"><div class="label">Events</div><div class="value">${state.events.length}</div><p class="muted">Upcoming and archive entries</p></div>
+            <div class="card stat"><div class="label">Bookings</div><div class="value">${state.bookings.length}</div><p class="muted">Event ticket requests</p></div>
+            <div class="card stat"><div class="label">Blogs</div><div class="value">${state.blogs.length}</div><p class="muted">Articles online</p></div>
+            <div class="card stat"><div class="label">Contacts</div><div class="value">${state.contacts.length}</div><p class="muted">Website messages</p></div>
+          </section>
+          <section class="panel">
+            <h3>Recent Events</h3>
+            ${table(['Title', 'Venue', 'Date', 'Price'], state.events.slice(0, 6).map((event) => [
+              event.title || event.name,
+              event.venue || event.location || '-',
+              fmtDate(event.start_at || event.date),
+              `${event.currency || 'EUR'} ${event.price_per_ticket ?? event.price ?? 0}`,
+            ]))}
+          </section>`;
+      }
+
+      function table(headers, rows) {
+        if (!rows.length) return '<p class="muted">No data yet.</p>';
+        return `<table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      }
+
+      function renderEvents() {
+        return `${pageTitle('Manage Events', 'Create, update, and publish Swaralaya events from admin.', '<button class="btn" id="new-event">Add Event</button>')}
+          <section class="panel" id="event-form-wrap" style="display:none">${eventForm()}</section>
+          <section class="panel">
+            ${table(['Title', 'Venue', 'Start', 'Price', 'Status'], state.events.map((event) => [
+              event.title || event.name,
+              event.venue || event.location || '-',
+              fmtDate(event.start_at || event.date),
+              `${event.currency || 'EUR'} ${event.price_per_ticket ?? event.price ?? 0}`,
+              event.status || (event.published === false ? 'draft' : 'published'),
+            ]))}
+          </section>`;
+      }
+
+      function eventForm() {
+        return `<h3>Add Event</h3>
+          <form id="event-form" class="form-grid">
+            <div><label>Title</label><input name="title" required /></div>
+            <div><label>Venue</label><input name="venue" /></div>
+            <div><label>Start Date</label><input name="start_at" type="datetime-local" /></div>
+            <div><label>Price</label><input name="price_per_ticket" type="number" min="0" step="0.01" value="0" /></div>
+            <div class="full"><label>Description</label><textarea name="description"></textarea></div>
+            <div class="actions full"><button class="btn" type="submit">Save Event</button><button class="btn secondary" type="button" id="cancel-event">Cancel</button></div>
+          </form>`;
+      }
+
+      function renderBookings() {
+        return `${pageTitle('Manage Bookings', 'Review event bookings from the connected backend.')}
+          <section class="panel">
+            ${table(['Reference', 'Customer', 'Event', 'Qty', 'Total', 'Status', 'Date'], state.bookings.map((booking) => [
+              booking.reference || booking.bookingReference || booking.id,
+              booking.customer?.name || booking.customerName || booking.name || '-',
+              booking.event?.title || booking.eventTitle || '-',
+              booking.quantity || booking.qty || 1,
+              `${booking.currency || 'EUR'} ${booking.total || booking.totalAmount || booking.amount || 0}`,
+              booking.status || booking.paymentStatus || '-',
+              fmtDate(booking.created_at || booking.createdAt),
+            ]))}
+          </section>`;
+      }
+
+      function renderBlogs() {
+        return `${pageTitle('Manage Blogs', 'Create and edit articles for the public site.', '<button class="btn" id="new-blog">Add Blog</button>')}
+          <section class="panel" id="blog-form-wrap" style="display:none">
+            <h3>Add Blog</h3>
+            <form id="blog-form" class="form-grid">
+              <div><label>Title</label><input name="title" required /></div>
+              <div><label>Slug</label><input name="slug" /></div>
+              <div class="full"><label>Excerpt</label><textarea name="excerpt"></textarea></div>
+              <div class="full"><label>Content</label><textarea name="content"></textarea></div>
+              <div class="actions full"><button class="btn" type="submit">Save Blog</button><button class="btn secondary" type="button" id="cancel-blog">Cancel</button></div>
+            </form>
+          </section>
+          <section class="panel">
+            ${table(['Title', 'Status', 'Published'], state.blogs.map((blog) => [
+              blog.title,
+              blog.status || (blog.published_at ? 'published' : 'draft'),
+              fmtDate(blog.published_at || blog.createdAt),
+            ]))}
+          </section>`;
+      }
+
+      function renderContacts() {
+        return `${pageTitle('Contacts', 'Read contact messages from visitors.')}
+          <section class="panel">
+            ${table(['Name', 'Email', 'Phone', 'Subject', 'Date'], state.contacts.map((contact) => [
+              contact.name,
+              contact.email,
+              contact.phone || '-',
+              contact.subject || contact.message || '-',
+              fmtDate(contact.created_at || contact.createdAt),
+            ]))}
+          </section>`;
+      }
+
+      function renderContent() {
+        const c = state.siteContent || {};
+        return `${pageTitle('Content Manager', 'Control frontend logo and replacement rules from admin.')}
+          <section class="panel">
+            <div class="notice">Logo and favicon are already PNG. Use rules below for small frontend text/image/link changes without touching code.</div>
+            <form id="content-form" class="form-grid">
+              <div class="full"><label>Logo URL</label><input name="logoUrl" value="${escapeHtml(c.logoUrl || '/swaralaya-logo-hd.png')}" /></div>
+              <div><label>Text Rules JSON</label><textarea name="textRules">${escapeHtml(JSON.stringify(c.textRules || [], null, 2))}</textarea></div>
+              <div><label>Image Rules JSON</label><textarea name="imageRules">${escapeHtml(JSON.stringify(c.imageRules || [], null, 2))}</textarea></div>
+              <div class="full actions"><button class="btn" type="submit">Save Content Settings</button><button class="btn secondary" type="button" id="reset-content">Reset</button></div>
+            </form>
+          </section>`;
+      }
+
+      function renderSmtp() {
+        const smtp = state.smtp || {};
+        return `${pageTitle('SMTP Settings', 'Configure email delivery for forms and booking notifications.')}
+          <section class="panel">
+            <form id="smtp-form" class="form-grid">
+              <div><label>Host</label><input name="host" value="${escapeHtml(smtp.host || 'smtp.gmail.com')}" /></div>
+              <div><label>Port</label><input name="port" type="number" value="${escapeHtml(smtp.port || 587)}" /></div>
+              <div><label>Username</label><input name="username" value="${escapeHtml(smtp.username || 'mswaralaya@gmail.com')}" /></div>
+              <div><label>Password / App Password</label><input name="password" type="password" placeholder="${smtp.has_password ? 'Saved' : 'Missing'}" /></div>
+              <div><label>From Email</label><input name="from_email" value="${escapeHtml(smtp.from_email || 'mswaralaya@gmail.com')}" /></div>
+              <div><label>From Name</label><input name="from_name" value="${escapeHtml(smtp.from_name || 'Swaralaya School of Music')}" /></div>
+              <div class="full"><label>Admin Emails</label><textarea name="admin_emails">${escapeHtml((smtp.admin_emails || ['mswaralaya@gmail.com']).join('\\n'))}</textarea></div>
+              <div class="full actions"><button class="btn" type="submit">Save SMTP</button><button class="btn secondary" type="button" id="test-smtp">Send Test Email</button></div>
+            </form>
+          </section>`;
+      }
+
+      async function render() {
+        const page = location.pathname.split('/').pop() || 'dashboard';
+        renderNav();
+        $('#content').innerHTML = '<p class="muted">Loading...</p>';
+        try {
+          await loadAll();
+          const view = {
+            dashboard: renderDashboard,
+            events: renderEvents,
+            bookings: renderBookings,
+            blogs: renderBlogs,
+            contacts: renderContacts,
+            content: renderContent,
+            smtp: renderSmtp,
+          }[page] || renderDashboard;
+          $('#content').innerHTML = view();
+          bindPage(page);
+        } catch (error) {
+          $('#content').innerHTML = `<section class="panel"><p style="color:var(--danger);font-weight:800">${escapeHtml(error.message)}</p><button class="btn" onclick="render()">Retry</button></section>`;
+        }
+      }
+
+      function bindPage(page) {
+        if (page === 'events') {
+          $('#new-event')?.addEventListener('click', () => $('#event-form-wrap').style.display = 'block');
+          $('#cancel-event')?.addEventListener('click', () => $('#event-form-wrap').style.display = 'none');
+          $('#event-form')?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+            await api('/api/v1/events', { method: 'POST', body: JSON.stringify(body) });
+            await render();
+          });
+        }
+        if (page === 'blogs') {
+          $('#new-blog')?.addEventListener('click', () => $('#blog-form-wrap').style.display = 'block');
+          $('#cancel-blog')?.addEventListener('click', () => $('#blog-form-wrap').style.display = 'none');
+          $('#blog-form')?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+            await api('/api/v1/blog', { method: 'POST', body: JSON.stringify(body) });
+            await render();
+          });
+        }
+        if (page === 'content') {
+          $('#content-form')?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const form = Object.fromEntries(new FormData(event.currentTarget).entries());
+            const body = {
+              logoUrl: form.logoUrl,
+              textRules: JSON.parse(form.textRules || '[]'),
+              imageRules: JSON.parse(form.imageRules || '[]'),
+              htmlRules: [],
+              linkRules: [],
+            };
+            await api('/api/site-content', { method: 'POST', body: JSON.stringify(body) });
+            await render();
+          });
+          $('#reset-content')?.addEventListener('click', async () => {
+            await api('/api/site-content/reset', { method: 'POST' });
+            await render();
+          });
+        }
+        if (page === 'smtp') {
+          $('#smtp-form')?.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+            await api('/api/smtp-config', { method: 'POST', body: JSON.stringify(body) });
+            await render();
+          });
+          $('#test-smtp')?.addEventListener('click', async () => {
+            try {
+              const payload = await api('/api/smtp-config/test', { method: 'POST' });
+              alert(payload.message || 'Test email sent.');
+            } catch (error) {
+              alert(error.message);
+            }
+          });
+        }
+      }
+
+      $('#login-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        $('#login-btn').disabled = true;
+        $('#login-error').style.display = 'none';
+        try {
+          const body = {
+            email: $('#email').value.trim(),
+            password: $('#password').value,
+          };
+          const payload = await api('/api/v1/auth/email/login', { method: 'POST', body: JSON.stringify(body) });
+          const token = pickToken(payload);
+          if (!token) throw new Error('Token missing');
+          state.token = token;
+          localStorage.setItem('anandadhara_admin_token', token);
+          localStorage.setItem('adminToken', token);
+          showApp();
+          history.replaceState({}, '', '/admin/dashboard');
+          await render();
+        } catch (error) {
+          $('#login-error').textContent = error.message || 'Login failed.';
+          $('#login-error').style.display = 'block';
+        } finally {
+          $('#login-btn').disabled = false;
+        }
+      });
+
+      $('#logout-btn').addEventListener('click', () => {
+        localStorage.removeItem('anandadhara_admin_token');
+        localStorage.removeItem('adminToken');
+        state.token = '';
+        location.href = '/admin/login';
+      });
+
+      window.addEventListener('popstate', render);
+
+      if (state.token) {
+        showApp();
+        render();
+      }
+    </script>
+  </body>
+</html>

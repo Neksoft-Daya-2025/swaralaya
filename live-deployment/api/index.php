@@ -11,6 +11,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+$adminEmail = 'info@swaralayaschoolofmusic.nl';
+$adminPassword = 'secret';
+$developerKey = 'swaralaya-dev';
+$token = 'swaralaya-live-admin-token';
 $dataFile = __DIR__ . '/swaralaya-live-data.json';
 
 $adminModules = [
@@ -108,6 +112,65 @@ function next_id(array $items): int
         }
     }
     return $max + 1;
+}
+
+function normalize_blog(array $item): array
+{
+    $item['published_at'] = $item['published_at'] ?? $item['createdAt'] ?? $item['date'] ?? null;
+    if (trim((string)($item['slug'] ?? '')) === '') {
+        $item['slug'] = strtolower(trim((string)preg_replace('/[^a-z0-9]+/i', '-', (string)($item['title'] ?? 'post')), '-'));
+    }
+    $image = trim((string)($item['coverImage'] ?? $item['featuredImage'] ?? $item['featured_image_url'] ?? $item['featured_image'] ?? ''));
+    if ($image !== '') {
+        $item['coverImage'] = $image;
+        $item['featuredImage'] = $image;
+        $item['featured_image_url'] = $image;
+    }
+    $gallery = $item['galleryImages'] ?? $item['gallery_images'] ?? [];
+    if (is_string($gallery)) {
+        $decoded = json_decode($gallery, true);
+        $gallery = is_array($decoded) ? $decoded : preg_split('/[\r\n,]+/', $gallery);
+    }
+    if (!is_array($gallery)) {
+        $gallery = [];
+    }
+    $gallery = array_values(array_unique(array_filter(array_map('trim', array_map('strval', $gallery)), fn($url) => $url !== '' && !preg_match('/^(?:YOUR_IMAGE_URL|data:|javascript:)/i', $url))));
+    $item['galleryImages'] = $gallery;
+    $item['gallery_images'] = $gallery;
+    return $item;
+}
+
+function store_uploaded_image(string $directory, string $publicBase): array
+{
+    $file = $_FILES['file'] ?? null;
+    if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        json_response(422, ['message' => 'Please choose an image to upload.']);
+    }
+    if (($file['size'] ?? 0) > 10 * 1024 * 1024) {
+        json_response(422, ['message' => 'Image must be 10 MB or smaller.']);
+    }
+
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file((string) $file['tmp_name']);
+    $extensions = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/gif' => 'gif',
+        'image/webp' => 'webp',
+        'image/avif' => 'avif',
+    ];
+    if (!isset($extensions[$mime])) {
+        json_response(422, ['message' => 'Only JPG, PNG, GIF, WebP, and AVIF images are allowed.']);
+    }
+    if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+        json_response(500, ['message' => 'Upload directory could not be created.']);
+    }
+
+    $filename = gmdate('Ymd-His') . '-' . bin2hex(random_bytes(6)) . '.' . $extensions[$mime];
+    if (!move_uploaded_file((string) $file['tmp_name'], $directory . '/' . $filename)) {
+        json_response(500, ['message' => 'Image could not be saved.']);
+    }
+
+    return ['url' => rtrim($publicBase, '/') . '/' . $filename];
 }
 
 function smtp_recipients(array $smtp, string $fallback): array
@@ -319,17 +382,23 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $path = route_path();
 $body = read_json_body();
 $data = load_data($dataFile);
-$adminEmail = strtolower(trim((string) (getenv('SWARALAYA_ADMIN_EMAIL') ?: ($data['admin']['email'] ?? 'info@swaralayaschoolofmusic.nl'))));
-$adminPassword = (string) (getenv('SWARALAYA_ADMIN_PASSWORD') ?: ($data['admin']['password'] ?? ''));
-$developerKey = (string) (getenv('SWARALAYA_DEVELOPER_KEY') ?: ($data['admin']['developer_key'] ?? ''));
-$token = hash('sha256', $adminEmail . '|' . $adminPassword . '|' . ($data['admin']['token_salt'] ?? 'swaralaya-live'));
+
+if ($method === 'GET' && preg_match('#^/api/uploads/([a-zA-Z0-9.-]+)$#', $path, $matches)) {
+    $upload = __DIR__ . '/uploads/' . basename($matches[1]);
+    if (!is_file($upload)) {
+        json_response(404, ['message' => 'Image not found.']);
+    }
+    header('Content-Type: ' . ((new finfo(FILEINFO_MIME_TYPE))->file($upload) ?: 'application/octet-stream'));
+    header('Content-Length: ' . filesize($upload));
+    header('Cache-Control: public, max-age=31536000, immutable');
+    header('X-Content-Type-Options: nosniff');
+    readfile($upload);
+    exit;
+}
 
 if (($path === '/api/auth/login' || $path === '/api/v1/auth/email/login') && $method === 'POST') {
     $email = strtolower(trim((string) ($body['email'] ?? $body['username'] ?? '')));
     $password = (string) ($body['password'] ?? '');
-    if ($adminEmail === '' || $adminPassword === '') {
-        json_response(503, ['message' => 'Admin credentials are not configured on this server.']);
-    }
     if ($email !== $adminEmail || $password !== $adminPassword) {
         json_response(401, ['message' => 'Invalid email or password.']);
     }
@@ -338,7 +407,7 @@ if (($path === '/api/auth/login' || $path === '/api/v1/auth/email/login') && $me
         'token' => $token,
         'access_token' => $token,
         'tokenExpires' => time() + 86400,
-        'refreshToken' => hash('sha256', 'refresh|' . $token),
+        'refreshToken' => 'swaralaya-live-refresh-token',
         'user' => $user
     ]);
 }
@@ -477,7 +546,7 @@ if ($path === '/api/v1/settings/modules' && $method === 'GET') {
 
 if ($path === '/api/v1/settings/modules' && in_array($method, ['POST', 'PUT'], true)) {
     $headerKey = $_SERVER['HTTP_X_DEVELOPER_KEY'] ?? '';
-    if ($developerKey === '' || (($body['developerKey'] ?? '') !== $developerKey && $headerKey !== $developerKey)) {
+    if (($body['developerKey'] ?? '') !== $developerKey && $headerKey !== $developerKey) {
         json_response(403, ['message' => 'Developer access is required to change module visibility.']);
     }
     $allowed = [];
@@ -499,8 +568,24 @@ if ($path === '/api/v1/settings/blog-visibility' && $method === 'GET') {
     json_response(200, ['data' => ['visible' => (bool)($data['settings']['blogVisibility'] ?? true)]]);
 }
 
+if ($path === '/api/v1/settings/blog-visibility' && $method === 'PUT') {
+    $data['settings']['blogVisibility'] = (bool)($body['visible'] ?? true);
+    save_data($dataFile, $data);
+    json_response(200, ['data' => ['visible' => $data['settings']['blogVisibility']]]);
+}
+
 if ($path === '/api/v1/settings/membership-visibility' && $method === 'GET') {
     json_response(200, ['data' => ['visible' => (bool)($data['settings']['membershipVisibility'] ?? false)]]);
+}
+
+if ($path === '/api/v1/settings/membership-visibility' && $method === 'PUT') {
+    $data['settings']['membershipVisibility'] = (bool)($body['visible'] ?? false);
+    save_data($dataFile, $data);
+    json_response(200, ['data' => ['visible' => $data['settings']['membershipVisibility']]]);
+}
+
+if (($path === '/api/v1/files/upload' || $path === '/api/v1/blogs/upload-image' || $path === '/api/blogs/upload-image') && $method === 'POST') {
+    json_response(201, store_uploaded_image(__DIR__ . '/uploads', '/api/uploads'));
 }
 
 $collectionMap = [
@@ -510,6 +595,19 @@ $collectionMap = [
     '/api/v1/donation' => 'donations',
     '/api/v1/membership' => 'memberships',
     '/api/v1/orders' => 'orders',
+    '/api/v1/payments' => 'payments',
+    '/api/v1/payment-management' => 'payments',
+    '/api/v1/announcements' => 'announcements',
+    '/api/v1/membership-plans' => 'membershipPlans',
+    '/api/v1/sponsors' => 'sponsors',
+    '/api/v1/sponsors/admin' => 'sponsors',
+    '/api/v1/users' => 'users',
+    '/api/v1/commerce/coupons' => 'commerceCoupons',
+    '/api/v1/commerce/taxes' => 'commerceTaxes',
+    '/api/v1/commerce/service-fees' => 'commerceServiceFees',
+    '/api/v1/commerce/checkout-profiles' => 'commerceCheckoutProfiles',
+    '/api/v1/past-events/categories' => 'pastEventCategories',
+    '/api/v1/past-events/admin/events' => 'events',
     '/api/enrollments' => 'enrollments',
     '/api/v1/enrollments' => 'enrollments',
     '/api/bookings' => 'bookings',
@@ -517,8 +615,12 @@ $collectionMap = [
     '/api/blogs' => 'blogs',
     '/api/v1/blogs' => 'blogs',
     '/api/v1/blog' => 'blogs',
+    '/api/gallery' => 'gallery',
+    '/api/v1/gallery' => 'gallery',
     '/api/events' => 'events',
     '/api/v1/events' => 'events',
+    '/api/notifications' => 'notifications',
+    '/api/v1/notifications' => 'notifications',
 ];
 
 if (($path === '/api/contacts/unread-count' || $path === '/api/v1/contacts/unread-count') && $method === 'GET') {
@@ -551,6 +653,12 @@ if (isset($collectionMap[$path])) {
         $items = array_values($data[$key] ?? []);
         if ($key === 'blogs') {
             $items = array_values(array_filter($items, fn($item) => (($item['status'] ?? 'published') === 'published') || !empty($item['published'])));
+            $items = array_map('normalize_blog', $items);
+            usort($items, function ($left, $right) {
+                $leftTime = strtotime((string)($left['published_at'] ?? '')) ?: 0;
+                $rightTime = strtotime((string)($right['published_at'] ?? '')) ?: 0;
+                return ($rightTime <=> $leftTime) ?: ((int)($right['id'] ?? 0) <=> (int)($left['id'] ?? 0));
+            });
         }
         json_response(200, list_payload($path, $items));
     }
@@ -563,7 +671,7 @@ if (isset($collectionMap[$path])) {
         if ($key === 'blogs') {
             $item['status'] = $item['status'] ?? 'published';
             $item['published'] = $item['published'] ?? true;
-            $item['slug'] = $item['slug'] ?? strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', (string)($item['title'] ?? 'post')), '-'));
+            $item = normalize_blog($item);
         }
         if ($key === 'events') {
             $item['status'] = $item['status'] ?? 'published';
@@ -638,11 +746,125 @@ if (isset($collectionMap[$path])) {
     }
 }
 
-if (preg_match('#^/api/(?:v1/)?(contacts|enrollments|bookings|blogs|events)/(\\d+)(?:/(read))?$#', $path, $matches)) {
-    $key = $matches[1];
-    $id = (int) $matches[2];
+if ($path === '/api/v1/gallery/admin' && $method === 'GET') {
+    json_response(200, ['data' => array_values($data['gallery'] ?? [])]);
+}
+
+if ($path === '/api/v1/settings/payment' && $method === 'GET') {
+    json_response(200, ['data' => $data['paymentSettings'] ?? (object)[]]);
+}
+
+if (preg_match('#^/api/v1/settings/payment/([^/]+)/(test|usage)$#', $path, $matches)) {
+    $gateway = urldecode($matches[1]);
+    $action = $matches[2];
+    if ($action === 'usage' && $method === 'GET') {
+        $count = count(array_filter($data['events'] ?? [], fn($event) => (($event['paymentGateway'] ?? '') === $gateway)));
+        json_response(200, ['data' => ['count' => $count]]);
+    }
+    if ($action === 'test' && $method === 'POST') {
+        json_response(200, ['data' => ['ok' => true, 'message' => 'Configuration saved and available.']]);
+    }
+}
+
+if (preg_match('#^/api/v1/settings/payment/([^/]+)$#', $path, $matches) && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+    $gateway = urldecode($matches[1]);
+    $current = $data['paymentSettings'][$gateway] ?? [];
+    $config = is_array($body['config'] ?? null) ? $body['config'] : $body;
+    $data['paymentSettings'][$gateway] = array_merge($current, $config, ['updatedAt' => now_iso()]);
+    save_data($dataFile, $data);
+    json_response(200, ['data' => $data['paymentSettings'][$gateway]]);
+}
+
+if (preg_match('#^/api/v1/past-events/admin/events/([^/]+)(?:/gallery(?:/([^/]+))?)?$#', $path, $matches)) {
+    $eventId = urldecode($matches[1]);
+    foreach ($data['events'] ?? [] as $index => $event) {
+        if ((string)($event['id'] ?? '') !== $eventId) {
+            continue;
+        }
+        $galleryId = isset($matches[2]) ? urldecode($matches[2]) : null;
+        $isGallery = str_contains($path, '/gallery');
+        if ($method === 'GET' && !$isGallery) {
+            $event['gallery'] = array_values($event['past_gallery'] ?? []);
+            json_response(200, ['data' => $event]);
+        }
+        if ($method === 'PATCH' && !$isGallery) {
+            $data['events'][$index] = array_merge($event, $body, ['updatedAt' => now_iso()]);
+            save_data($dataFile, $data);
+            json_response(200, ['data' => $data['events'][$index]]);
+        }
+        if ($method === 'POST' && $isGallery) {
+            $gallery = array_values($event['past_gallery'] ?? []);
+            $gallery[] = ['id' => next_id($gallery), 'image' => (string)($body['image'] ?? ''), 'url' => (string)($body['image'] ?? '')];
+            $data['events'][$index]['past_gallery'] = $gallery;
+            save_data($dataFile, $data);
+            json_response(201, ['data' => end($gallery)]);
+        }
+        if ($method === 'DELETE' && $isGallery && $galleryId !== null) {
+            $data['events'][$index]['past_gallery'] = array_values(array_filter(
+                $event['past_gallery'] ?? [],
+                fn($image, $imageIndex) => (string)($image['id'] ?? $imageIndex) !== $galleryId,
+                ARRAY_FILTER_USE_BOTH
+            ));
+            save_data($dataFile, $data);
+            json_response(200, ['message' => 'Deleted successfully.']);
+        }
+    }
+    json_response(404, ['message' => 'Not found.']);
+}
+
+if (preg_match('#^/api/v1/(blog|events)/id/([^/]+)$#', $path, $matches)) {
+    $path = '/api/v1/' . $matches[1] . '/' . urldecode($matches[2]);
+}
+
+if (preg_match('#^/api/v1/commerce/(coupons|taxes|service-fees|checkout-profiles)/([^/]+)$#', $path, $matches)) {
+    $path = '/api/v1/commerce-' . $matches[1] . '/' . urldecode($matches[2]);
+}
+
+if (preg_match('#^/api/v1/past-events/categories/([^/]+)$#', $path, $matches)) {
+    $path = '/api/v1/past-event-category/' . urldecode($matches[1]);
+}
+
+$itemResourceMap = [
+    'contact' => 'contacts',
+    'contacts' => 'contacts',
+    'enrollment' => 'enrollments',
+    'enrollments' => 'enrollments',
+    'booking' => 'bookings',
+    'bookings' => 'bookings',
+    'blog' => 'blogs',
+    'blogs' => 'blogs',
+    'event' => 'events',
+    'events' => 'events',
+    'gallery' => 'gallery',
+    'order' => 'orders',
+    'orders' => 'orders',
+    'payment' => 'payments',
+    'payments' => 'payments',
+    'notification' => 'notifications',
+    'notifications' => 'notifications',
+    'announcement' => 'announcements',
+    'announcements' => 'announcements',
+    'membership-plan' => 'membershipPlans',
+    'membership-plans' => 'membershipPlans',
+    'sponsor' => 'sponsors',
+    'sponsors' => 'sponsors',
+    'user' => 'users',
+    'users' => 'users',
+    'commerce-coupons' => 'commerceCoupons',
+    'commerce-taxes' => 'commerceTaxes',
+    'commerce-service-fees' => 'commerceServiceFees',
+    'commerce-checkout-profiles' => 'commerceCheckoutProfiles',
+    'past-event-category' => 'pastEventCategories',
+];
+
+if (preg_match('#^/api/(?:v1/)?([a-z-]+)/([^/]+)(?:/([a-z-]+))?$#', $path, $matches) && isset($itemResourceMap[$matches[1]])) {
+    $key = $itemResourceMap[$matches[1]];
+    $identifier = urldecode($matches[2]);
     foreach ($data[$key] ?? [] as $index => $item) {
-        if ((int)($item['id'] ?? 0) === $id) {
+        $normalizedItem = $key === 'blogs' ? normalize_blog($item) : $item;
+        $matchesId = isset($item['id']) && (string)$item['id'] === $identifier;
+        $matchesSlug = isset($normalizedItem['slug']) && (string)$normalizedItem['slug'] === $identifier;
+        if ($matchesId || $matchesSlug) {
             if ($method === 'DELETE') {
                 array_splice($data[$key], $index, 1);
                 save_data($dataFile, $data);
@@ -650,20 +872,40 @@ if (preg_match('#^/api/(?:v1/)?(contacts|enrollments|bookings|blogs|events)/(\\d
             }
             if (in_array($method, ['PUT', 'PATCH'], true)) {
                 $data[$key][$index] = array_merge($item, $body, ['updatedAt' => now_iso()]);
+                if ($key === 'blogs') {
+                    $data[$key][$index] = normalize_blog($data[$key][$index]);
+                }
                 if (($matches[3] ?? '') === 'read') {
                     $data[$key][$index]['read'] = true;
                 }
+                if (($matches[3] ?? '') === 'resolve') {
+                    $data[$key][$index]['status'] = 'resolved';
+                    $data[$key][$index]['resolvedAt'] = now_iso();
+                    $data[$key][$index]['read'] = true;
+                }
+                if (($matches[3] ?? '') === 'featured' && !array_key_exists('isFeatured', $body)) {
+                    $data[$key][$index]['isFeatured'] = !($item['isFeatured'] ?? false);
+                }
+                if ($key === 'announcements') {
+                    $action = $matches[3] ?? '';
+                    if ($action === 'publish' || $action === 'reactivate') {
+                        $data[$key][$index]['status'] = 'published';
+                        $data[$key][$index]['active'] = true;
+                    } elseif ($action === 'archive') {
+                        $data[$key][$index]['status'] = 'archived';
+                        $data[$key][$index]['active'] = false;
+                    }
+                }
                 save_data($dataFile, $data);
                 json_response(200, is_v1($path) ? ['data' => $data[$key][$index]] : $data[$key][$index]);
+            }
+            if ($key === 'blogs') {
+                $item = $normalizedItem;
             }
             json_response(200, is_v1($path) ? ['data' => $item] : $item);
         }
     }
     json_response(404, ['message' => 'Not found.']);
-}
-
-if (($path === '/api/blogs/upload-image' || $path === '/api/v1/blogs/upload-image') && $method === 'POST') {
-    json_response(200, is_v1($path) ? ['data' => ['url' => '/blog-1.webp']] : ['url' => '/blog-1.webp']);
 }
 
 json_response(404, ['message' => 'API route not found.', 'path' => $path]);

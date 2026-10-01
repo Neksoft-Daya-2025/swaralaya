@@ -1,0 +1,666 @@
+<?php
+declare(strict_types=1);
+
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
+$adminEmail = 'info@swaralayaschoolofmusic.nl';
+$adminPassword = 'secret';
+$developerKey = 'swaralaya-dev';
+$token = 'swaralaya-live-admin-token';
+$dataFile = __DIR__ . '/swaralaya-live-data.json';
+
+$adminModules = [
+    ['label' => 'Dashboard', 'to' => '/admin/dashboard', 'locked' => true],
+    ['label' => 'Enrollments', 'to' => '/admin/enrollments'],
+    ['label' => 'Contacts', 'to' => '/admin/contacts'],
+    ['label' => 'Donations', 'to' => '/admin/donations'],
+    ['label' => 'Membership', 'to' => '/admin/membership'],
+    ['label' => 'Membership Plans', 'to' => '/admin/membership-plans'],
+    ['label' => 'Blogs', 'to' => '/admin/blog'],
+    ['label' => 'Gallery', 'to' => '/admin/gallery'],
+    ['label' => 'Sponsors', 'to' => '/admin/sponsors'],
+    ['label' => 'Events', 'to' => '/admin/events'],
+    ['label' => 'Past Events', 'to' => '/admin/past-events'],
+    ['label' => 'Bookings', 'to' => '/admin/bookings'],
+    ['label' => 'Orders', 'to' => '/admin/orders'],
+    ['label' => 'Payment Management', 'to' => '/admin/payment-management'],
+    ['label' => 'Commerce', 'to' => '/admin/commerce'],
+    ['label' => 'SMTP Settings', 'to' => '/admin/smtp-settings'],
+    ['label' => 'Announcements', 'to' => '/admin/announcements'],
+    ['label' => 'Settings', 'to' => '/admin/settings', 'locked' => true],
+    ['label' => 'Users', 'to' => '/admin/users'],
+];
+
+function json_response(int $status, mixed $payload): void
+{
+    http_response_code($status);
+    echo json_encode($payload, JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function read_json_body(): array
+{
+    $raw = file_get_contents('php://input') ?: '';
+    if ($raw === '') {
+        return [];
+    }
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
+}
+
+function load_data(string $file): array
+{
+    if (!is_file($file)) {
+        return [
+            'contacts' => [],
+            'enrollments' => [],
+            'bookings' => [],
+            'blogs' => [],
+            'events' => [],
+            'notifications' => [],
+            'smtp' => [],
+            'settings' => []
+        ];
+    }
+    $data = json_decode((string) file_get_contents($file), true);
+    return is_array($data) ? $data : [];
+}
+
+function save_data(string $file, array $data): void
+{
+    file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+}
+
+function route_path(): string
+{
+    $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+    return '/' . trim($uri, '/');
+}
+
+function is_v1(string $path): bool
+{
+    return str_starts_with($path, '/api/v1/');
+}
+
+function clean_smtp(array $smtp): array
+{
+    unset($smtp['password']);
+    $smtp['has_password'] = true;
+    return $smtp;
+}
+
+function now_iso(): string
+{
+    return gmdate('c');
+}
+
+function next_id(array $items): int
+{
+    $max = 0;
+    foreach ($items as $item) {
+        $id = isset($item['id']) ? (int) $item['id'] : 0;
+        if ($id > $max) {
+            $max = $id;
+        }
+    }
+    return $max + 1;
+}
+
+function smtp_recipients(array $smtp, string $fallback): array
+{
+    $raw = $smtp['admin_emails'] ?? [$fallback];
+    if (is_string($raw)) {
+        $raw = preg_split('/[,;\s]+/', $raw) ?: [];
+    }
+    if (!is_array($raw)) {
+        $raw = [];
+    }
+    $emails = array_values(array_unique(array_filter(array_map(
+        fn($email) => trim((string) $email),
+        $raw
+    ), fn($email) => filter_var($email, FILTER_VALIDATE_EMAIL))));
+    return $emails ?: [$fallback];
+}
+
+function smtp_read($socket): string
+{
+    $response = '';
+    while (($line = fgets($socket, 515)) !== false) {
+        $response .= $line;
+        if (preg_match('/^\d{3}\s/', $line)) {
+            break;
+        }
+    }
+    return $response;
+}
+
+function smtp_expect($socket, array $codes, string $context): string
+{
+    $response = smtp_read($socket);
+    $code = (int) substr($response, 0, 3);
+    if (!in_array($code, $codes, true)) {
+        throw new RuntimeException($context . ' failed: ' . trim($response));
+    }
+    return $response;
+}
+
+function smtp_command($socket, string $command, array $codes, string $context): string
+{
+    fwrite($socket, $command . "\r\n");
+    return smtp_expect($socket, $codes, $context);
+}
+
+function smtp_send_mail(array $smtp, array $to, string $subject, string $text, string $fallbackFrom): array
+{
+    $host = trim((string) ($smtp['host'] ?? 'smtp.office365.com'));
+    $port = (int) ($smtp['port'] ?? 587);
+    $username = trim((string) ($smtp['username'] ?? $smtp['user'] ?? $fallbackFrom));
+    $password = (string) ($smtp['password'] ?? '');
+    $fromEmail = trim((string) ($smtp['from_email'] ?? $smtp['fromEmail'] ?? $username));
+    if ($fromEmail === '') {
+        $fromEmail = $fallbackFrom;
+    }
+    $fromName = trim((string) ($smtp['from_name'] ?? $smtp['fromName'] ?? 'Swaralaya School of Music'));
+
+    if ($host === '' || $username === '' || $password === '' || !filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('SMTP settings are incomplete.');
+    }
+
+    $remote = (($smtp['encryption'] ?? '') === 'ssl' || $port === 465 ? 'ssl://' : '') . $host . ':' . $port;
+    $errno = 0;
+    $errstr = '';
+    $socket = stream_socket_client($remote, $errno, $errstr, 20, STREAM_CLIENT_CONNECT);
+    if (!$socket) {
+        throw new RuntimeException("Could not connect to SMTP server: {$errstr}");
+    }
+    stream_set_timeout($socket, 20);
+
+    try {
+        smtp_expect($socket, [220], 'SMTP greeting');
+        smtp_command($socket, 'EHLO swaralayaschoolofmusic.nl', [250], 'EHLO');
+        if ((($smtp['encryption'] ?? 'tls') === 'tls') && $port !== 465) {
+            smtp_command($socket, 'STARTTLS', [220], 'STARTTLS');
+            if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                throw new RuntimeException('Could not enable SMTP TLS.');
+            }
+            smtp_command($socket, 'EHLO swaralayaschoolofmusic.nl', [250], 'EHLO after TLS');
+        }
+        smtp_command($socket, 'AUTH LOGIN', [334], 'SMTP auth');
+        smtp_command($socket, base64_encode($username), [334], 'SMTP username');
+        smtp_command($socket, base64_encode($password), [235], 'SMTP password');
+        smtp_command($socket, 'MAIL FROM:<' . $fromEmail . '>', [250], 'MAIL FROM');
+        foreach ($to as $recipient) {
+            smtp_command($socket, 'RCPT TO:<' . $recipient . '>', [250, 251], 'RCPT TO');
+        }
+        smtp_command($socket, 'DATA', [354], 'DATA');
+
+        $safeSubject = preg_replace('/[\r\n]+/', ' ', $subject);
+        $encodedSubject = '=?UTF-8?B?' . base64_encode($safeSubject) . '?=';
+        $safeFromName = addcslashes($fromName, "\\\"");
+        $body = str_replace(["\r\n", "\r"], "\n", $text);
+        $body = preg_replace('/^\./m', '..', $body);
+        $message = [
+            'From: "' . $safeFromName . '" <' . $fromEmail . '>',
+            'To: ' . implode(', ', $to),
+            'Subject: ' . $encodedSubject,
+            'MIME-Version: 1.0',
+            'Content-Type: text/plain; charset=UTF-8',
+            'Content-Transfer-Encoding: 8bit',
+            '',
+            $body,
+        ];
+        fwrite($socket, implode("\r\n", $message) . "\r\n.\r\n");
+        smtp_expect($socket, [250], 'SMTP send');
+        smtp_command($socket, 'QUIT', [221, 250], 'QUIT');
+    } finally {
+        fclose($socket);
+    }
+
+    return ['sent' => true, 'to' => $to];
+}
+
+function send_admin_notification(array $data, string $subject, string $text, string $fallbackEmail, ?string $recipient = null): array
+{
+    $smtp = is_array($data['smtp'] ?? null) ? $data['smtp'] : [];
+    $to = $recipient && filter_var($recipient, FILTER_VALIDATE_EMAIL)
+        ? [$recipient]
+        : smtp_recipients($smtp, $fallbackEmail);
+    return smtp_send_mail($smtp, $to, $subject, $text, $fallbackEmail);
+}
+
+function list_payload(string $path, array $items): array
+{
+    return is_v1($path) ? ['data' => array_values($items)] : array_values($items);
+}
+
+function default_settings_content(): array
+{
+    return [
+        'hero' => [
+            'title' => 'Swaralaya School of Music',
+            'subtitle' => 'Discover the Melody in You',
+            'description' => 'Learn Indian classical and Carnatic music in a focused, supportive environment.',
+            'ctaLabel' => 'Enroll Now',
+            'ctaUrl' => '/enroll-now',
+            'secondaryCtaLabel' => 'View Courses',
+            'secondaryCtaUrl' => '/courses',
+            'imageUrl' => '/swaralaya-main-logo.png',
+        ],
+        'about' => [
+            'title' => 'About Swaralaya',
+            'subtitle' => 'A nurturing music school in the Netherlands',
+            'description' => 'Swaralaya School of Music helps students explore vocal and instrumental music with discipline, warmth, and cultural depth.',
+            'mission' => 'To make Indian music learning accessible, structured, and inspiring.',
+            'vision' => 'To build a confident community of learners and performers.',
+            'imageUrl' => '/vocals-section-3-img.webp',
+        ],
+        'contact' => [
+            'email' => 'info@swaralayaschoolofmusic.nl',
+            'phone' => '+31 6428 25268',
+            'whatsapp' => '+31 6428 25268',
+            'address' => 'J J Slauerhoffstraat 63, 1321RA Almere, Netherlands.',
+            'mapUrl' => '',
+            'hours' => 'By appointment',
+        ],
+        'social_links' => [
+            'facebook' => '',
+            'instagram' => '',
+            'twitter' => '',
+            'youtube' => '',
+            'linkedin' => '',
+            'whatsapp' => '',
+        ],
+        'footer' => [
+            'about' => 'Indian Carnatic music classes to help you discover the melody within.',
+            'copyright' => 'Copyright 2025, powered by Neksoft Consultancy Services',
+            'contactEmail' => 'info@swaralayaschoolofmusic.nl',
+            'contactPhone' => '+31 6428 25268',
+            'address' => 'J J Slauerhoffstraat 63, 1321RA Almere, Netherlands.',
+        ],
+        'donation' => [
+            'title' => 'Support Swaralaya',
+            'description' => 'Support music learning, events, workshops, and cultural programs.',
+            'bankName' => '',
+            'accountName' => 'Swaralaya School of Music',
+            'accountNumber' => '',
+            'ifsc' => '',
+            'branch' => '',
+            'upiId' => '',
+            'qrImageUrl' => '',
+        ],
+        'seo' => [
+            'metaTitle' => 'Swaralaya School of Music',
+            'metaDescription' => 'Indian classical, Carnatic, vocal, and instrumental music classes in the Netherlands.',
+            'keywords' => ['Swaralaya', 'music school', 'Carnatic music', 'Indian classical music'],
+            'ogImageUrl' => '/swaralaya-main-logo.png',
+            'canonicalUrl' => 'https://www.swaralayaschoolofmusic.nl/',
+        ],
+    ];
+}
+
+function modules_payload(array $data, array $adminModules): array
+{
+    $hidden = $data['moduleVisibility']['hiddenModules'] ?? [];
+    if (!is_array($hidden)) {
+        $hidden = [];
+    }
+    return [
+        'modules' => $adminModules,
+        'hiddenModules' => array_values(array_unique(array_map('strval', $hidden))),
+        'updatedAt' => $data['moduleVisibility']['updatedAt'] ?? gmdate('c'),
+    ];
+}
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$path = route_path();
+$body = read_json_body();
+$data = load_data($dataFile);
+
+if (($path === '/api/auth/login' || $path === '/api/v1/auth/email/login') && $method === 'POST') {
+    $email = strtolower(trim((string) ($body['email'] ?? $body['username'] ?? '')));
+    $password = (string) ($body['password'] ?? '');
+    if ($email !== $adminEmail || $password !== $adminPassword) {
+        json_response(401, ['message' => 'Invalid email or password.']);
+    }
+    $user = ['id' => 1, 'name' => 'Swaralaya Admin', 'email' => $adminEmail, 'role' => 'admin'];
+    json_response(200, [
+        'token' => $token,
+        'access_token' => $token,
+        'tokenExpires' => time() + 86400,
+        'refreshToken' => 'swaralaya-live-refresh-token',
+        'user' => $user
+    ]);
+}
+
+if ($path === '/api/v1/auth/me' && $method === 'GET') {
+    json_response(200, ['data' => ['id' => 1, 'name' => 'Swaralaya Admin', 'email' => $adminEmail, 'role' => 'admin']]);
+}
+
+if ($path === '/api/backend/status' && $method === 'GET') {
+    json_response(200, ['ok' => true, 'backend' => 'Swaralaya live PHP API bridge', 'storage' => $dataFile, 'smtpConfigured' => true]);
+}
+
+if ($path === '/api/v1/site' && $method === 'GET') {
+    json_response(200, ['data' => [
+        'id' => 1,
+        'name' => 'Swaralaya School of Music',
+        'slug' => 'swaralaya-school-of-music',
+        'settings' => [
+            'site_name' => 'Swaralaya School of Music',
+            'contact_email' => 'info@swaralayaschoolofmusic.nl',
+            'from_email' => 'info@swaralayaschoolofmusic.nl',
+            'phone' => '+31 6428 25268',
+            'address' => 'J J Slauerhoffstraat 63, 1321RA Almere, Netherlands.',
+            'logo_url' => '/swaralaya-main-logo.png',
+            'favicon_url' => '/favicon.png'
+        ]
+    ]]);
+}
+
+if ($path === '/api/site-content' && $method === 'GET') {
+    json_response(200, $data['siteContent'] ?? [
+        'logoUrl' => '/swaralaya-logo-hd.png',
+        'textRules' => [],
+        'imageRules' => [],
+        'htmlRules' => [],
+        'linkRules' => []
+    ]);
+}
+
+if ($path === '/api/site-content' && in_array($method, ['POST', 'PUT'], true)) {
+    $data['siteContent'] = array_merge($data['siteContent'] ?? [], [
+        'logoUrl' => $body['logoUrl'] ?? '/swaralaya-logo-hd.png',
+        'textRules' => is_array($body['textRules'] ?? null) ? $body['textRules'] : [],
+        'imageRules' => is_array($body['imageRules'] ?? null) ? $body['imageRules'] : [],
+        'htmlRules' => is_array($body['htmlRules'] ?? null) ? $body['htmlRules'] : [],
+        'linkRules' => is_array($body['linkRules'] ?? null) ? $body['linkRules'] : []
+    ]);
+    save_data($dataFile, $data);
+    json_response(200, ['message' => 'Website content saved successfully.', 'data' => $data['siteContent']]);
+}
+
+if ($path === '/api/site-content/reset' && $method === 'POST') {
+    $data['siteContent'] = [
+        'logoUrl' => '/swaralaya-logo-hd.png',
+        'textRules' => [],
+        'imageRules' => [],
+        'htmlRules' => [],
+        'linkRules' => []
+    ];
+    save_data($dataFile, $data);
+    json_response(200, ['message' => 'Website content reset successfully.', 'data' => $data['siteContent']]);
+}
+
+if ($path === '/api/v1/settings/content' && $method === 'GET') {
+    $content = array_merge(default_settings_content(), is_array($data['settingsContent'] ?? null) ? $data['settingsContent'] : []);
+    json_response(200, $content);
+}
+
+if (preg_match('#^/api/v1/settings/content/([a-zA-Z0-9_-]+)$#', $path, $matches) && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+    $section = $matches[1];
+    $content = array_merge(default_settings_content(), is_array($data['settingsContent'] ?? null) ? $data['settingsContent'] : []);
+    $readKey = $section === 'social' ? 'social_links' : $section;
+    $content[$readKey] = array_merge(is_array($content[$readKey] ?? null) ? $content[$readKey] : [], $body);
+    $data['settingsContent'] = $content;
+    save_data($dataFile, $data);
+    json_response(200, ['message' => 'Settings saved successfully.', 'data' => $content[$readKey]]);
+}
+
+if (($path === '/api/smtp-config' || $path === '/api/v1/settings/smtp') && $method === 'GET') {
+    $smtp = clean_smtp($data['smtp'] ?? []);
+    if ($path === '/api/v1/settings/smtp') {
+        json_response(200, ['data' => [
+            'host' => $smtp['host'] ?? 'smtp.office365.com',
+            'port' => $smtp['port'] ?? 587,
+            'user' => $smtp['username'] ?? $adminEmail,
+            'fromEmail' => $smtp['from_email'] ?? $adminEmail,
+            'fromName' => $smtp['from_name'] ?? 'Swaralaya School of Music',
+            'secure' => false,
+            'requireTls' => true,
+            'ignoreTls' => false,
+            'hasPassword' => true,
+            'adminEmails' => $smtp['admin_emails'] ?? [$adminEmail]
+        ]]);
+    }
+    json_response(200, $smtp);
+}
+
+if (($path === '/api/smtp-config' || $path === '/api/v1/settings/smtp') && in_array($method, ['POST', 'PUT'], true)) {
+    $current = $data['smtp'] ?? [];
+    $data['smtp'] = array_merge($current, [
+        'configured' => true,
+        'host' => $body['host'] ?? $body['smtpHost'] ?? $current['host'] ?? 'smtp.office365.com',
+        'port' => (int) ($body['port'] ?? $body['smtpPort'] ?? $current['port'] ?? 587),
+        'username' => $body['username'] ?? $body['user'] ?? $current['username'] ?? $adminEmail,
+        'encryption' => $body['encryption'] ?? 'tls',
+        'from_email' => $body['from_email'] ?? $body['fromEmail'] ?? $current['from_email'] ?? $adminEmail,
+        'from_name' => $body['from_name'] ?? $body['fromName'] ?? $current['from_name'] ?? 'Swaralaya School of Music',
+        'admin_emails' => $body['admin_emails'] ?? $body['adminEmails'] ?? $current['admin_emails'] ?? [$adminEmail]
+    ]);
+    if (!empty($body['password'])) {
+        $data['smtp']['password'] = (string) $body['password'];
+    }
+    save_data($dataFile, $data);
+    json_response(200, ['message' => 'SMTP configuration saved successfully.', 'data' => clean_smtp($data['smtp'])]);
+}
+
+if (($path === '/api/smtp-config/test' || $path === '/api/v1/settings/smtp/test-email') && $method === 'POST') {
+    try {
+        $recipient = trim((string) ($body['recipient'] ?? $body['email'] ?? $adminEmail));
+        $result = send_admin_notification(
+            $data,
+            'Swaralaya School of Music - Email Delivery Test',
+            "Hello,\n\nThis is a test email from Swaralaya School of Music.\n\nYour website SMTP is configured successfully and admin notifications for enrollments, bookings, and contact messages are ready to be delivered to this inbox.\n\nWebsite: https://www.swaralayaschoolofmusic.nl\nSent at: " . now_iso() . "\n\nRegards,\nSwaralaya School of Music",
+            $adminEmail,
+            $recipient
+        );
+        json_response(200, ['data' => ['ok' => true, 'message' => 'Test email sent successfully.', 'mail' => $result]]);
+    } catch (Throwable $error) {
+        json_response(500, ['message' => 'SMTP test failed: ' . $error->getMessage()]);
+    }
+}
+
+if ($path === '/api/v1/settings/modules' && $method === 'GET') {
+    json_response(200, ['data' => modules_payload($data, $adminModules)]);
+}
+
+if ($path === '/api/v1/settings/modules' && in_array($method, ['POST', 'PUT'], true)) {
+    $headerKey = $_SERVER['HTTP_X_DEVELOPER_KEY'] ?? '';
+    if (($body['developerKey'] ?? '') !== $developerKey && $headerKey !== $developerKey) {
+        json_response(403, ['message' => 'Developer access is required to change module visibility.']);
+    }
+    $allowed = [];
+    foreach ($adminModules as $module) {
+        if (empty($module['locked'])) {
+            $allowed[] = $module['to'];
+        }
+    }
+    $requested = is_array($body['hiddenModules'] ?? null) ? $body['hiddenModules'] : [];
+    $data['moduleVisibility'] = [
+        'hiddenModules' => array_values(array_unique(array_filter(array_map('strval', $requested), fn($item) => in_array($item, $allowed, true)))),
+        'updatedAt' => now_iso(),
+    ];
+    save_data($dataFile, $data);
+    json_response(200, ['data' => modules_payload($data, $adminModules)]);
+}
+
+if ($path === '/api/v1/settings/blog-visibility' && $method === 'GET') {
+    json_response(200, ['data' => ['visible' => (bool)($data['settings']['blogVisibility'] ?? true)]]);
+}
+
+if ($path === '/api/v1/settings/membership-visibility' && $method === 'GET') {
+    json_response(200, ['data' => ['visible' => (bool)($data['settings']['membershipVisibility'] ?? false)]]);
+}
+
+$collectionMap = [
+    '/api/contacts' => 'contacts',
+    '/api/v1/contacts' => 'contacts',
+    '/api/v1/contact' => 'contacts',
+    '/api/v1/donation' => 'donations',
+    '/api/v1/membership' => 'memberships',
+    '/api/v1/orders' => 'orders',
+    '/api/enrollments' => 'enrollments',
+    '/api/v1/enrollments' => 'enrollments',
+    '/api/bookings' => 'bookings',
+    '/api/v1/bookings' => 'bookings',
+    '/api/blogs' => 'blogs',
+    '/api/v1/blogs' => 'blogs',
+    '/api/v1/blog' => 'blogs',
+    '/api/events' => 'events',
+    '/api/v1/events' => 'events',
+];
+
+if (($path === '/api/contacts/unread-count' || $path === '/api/v1/contacts/unread-count') && $method === 'GET') {
+    $count = count(array_filter($data['contacts'] ?? [], fn($item) => empty($item['read'])));
+    json_response(200, is_v1($path) ? ['data' => ['count' => $count]] : ['count' => $count]);
+}
+
+if (($path === '/api/enrollments/stats' || $path === '/api/v1/enrollments/stats') && $method === 'GET') {
+    $items = $data['enrollments'] ?? [];
+    $stats = ['total' => count($items), 'pending' => count(array_filter($items, fn($x) => (($x['status'] ?? 'pending') === 'pending')))];
+    json_response(200, is_v1($path) ? ['data' => $stats] : $stats);
+}
+
+if ($path === '/api/v1/notifications' && $method === 'GET') {
+    json_response(200, ['data' => array_values($data['notifications'] ?? [])]);
+}
+
+if ($path === '/api/v1/notifications/read-all' && in_array($method, ['POST', 'PATCH'], true)) {
+    foreach ($data['notifications'] as &$notification) {
+        $notification['read'] = true;
+    }
+    unset($notification);
+    save_data($dataFile, $data);
+    json_response(200, ['data' => array_values($data['notifications'] ?? [])]);
+}
+
+if (isset($collectionMap[$path])) {
+    $key = $collectionMap[$path];
+    if ($method === 'GET') {
+        $items = array_values($data[$key] ?? []);
+        if ($key === 'blogs') {
+            $items = array_values(array_filter($items, fn($item) => (($item['status'] ?? 'published') === 'published') || !empty($item['published'])));
+        }
+        json_response(200, list_payload($path, $items));
+    }
+    if ($method === 'POST') {
+        $item = array_merge($body, [
+            'id' => next_id($data[$key] ?? []),
+            'createdAt' => now_iso(),
+            'updatedAt' => now_iso()
+        ]);
+        if ($key === 'blogs') {
+            $item['status'] = $item['status'] ?? 'published';
+            $item['published'] = $item['published'] ?? true;
+            $item['slug'] = $item['slug'] ?? strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', (string)($item['title'] ?? 'post')), '-'));
+        }
+        if ($key === 'events') {
+            $item['status'] = $item['status'] ?? 'published';
+        }
+        if ($key === 'enrollments') {
+            $studentName = trim((string)($item['fullName'] ?? $item['name'] ?? 'A student'));
+            $studentEmail = trim((string)($item['email'] ?? ''));
+            $studentPhone = trim((string)($item['phone'] ?? ''));
+            $courseName = trim((string)($item['course'] ?? 'Swaralaya course'));
+            $item['status'] = $item['status'] ?? 'pending';
+            $data['notifications'][] = [
+                'id' => next_id($data['notifications'] ?? []),
+                'type' => 'enrollment',
+                'title' => 'New enrollment',
+                'message' => $studentName . ' submitted enrollment for ' . $courseName,
+                'read' => false,
+                'createdAt' => now_iso()
+            ];
+            try {
+                $item['adminEmailSent'] = true;
+                $item['adminEmailResult'] = send_admin_notification(
+                    $data,
+                    'New Swaralaya Enrollment',
+                    "New enrollment received.\n\nName: {$studentName}\nEmail: {$studentEmail}\nPhone: {$studentPhone}\nCourse: {$courseName}\nAge: " . trim((string)($item['age'] ?? '')) . "\nExperience: " . trim((string)($item['experience'] ?? '')) . "\n\nMessage:\n" . trim((string)($item['message'] ?? '')),
+                    $adminEmail
+                );
+            } catch (Throwable $error) {
+                $item['adminEmailSent'] = false;
+                $item['adminEmailError'] = $error->getMessage();
+            }
+        }
+        if ($key === 'bookings') {
+            $item['status'] = $item['status'] ?? 'pending';
+            $data['notifications'][] = [
+                'id' => next_id($data['notifications'] ?? []),
+                'type' => 'booking',
+                'title' => 'New booking',
+                'message' => trim((string)($item['quantity'] ?? '1')) . ' ticket booked for ' . trim((string)($item['eventTitle'] ?? $item['event'] ?? 'Swaralaya event')),
+                'read' => false,
+                'createdAt' => now_iso()
+            ];
+            try {
+                $item['adminEmailSent'] = true;
+                $item['adminEmailResult'] = send_admin_notification(
+                    $data,
+                    'New Swaralaya Event Booking',
+                    "New booking received.\n\nName: " . trim((string)($item['customerName'] ?? $item['name'] ?? '')) . "\nEmail: " . trim((string)($item['customerEmail'] ?? $item['email'] ?? '')) . "\nPhone: " . trim((string)($item['customerPhone'] ?? $item['phone'] ?? '')) . "\nEvent: " . trim((string)($item['eventTitle'] ?? $item['event'] ?? 'Swaralaya event')) . "\nTickets: " . trim((string)($item['quantity'] ?? '1')),
+                    $adminEmail
+                );
+            } catch (Throwable $error) {
+                $item['adminEmailSent'] = false;
+                $item['adminEmailError'] = $error->getMessage();
+            }
+        }
+        if ($key === 'contacts') {
+            try {
+                $item['adminEmailSent'] = true;
+                $item['adminEmailResult'] = send_admin_notification(
+                    $data,
+                    'New Swaralaya Contact Message',
+                    "New contact message received.\n\nName: " . trim((string)($item['name'] ?? '')) . "\nEmail: " . trim((string)($item['email'] ?? '')) . "\nPhone: " . trim((string)($item['phone'] ?? '')) . "\nSubject: " . trim((string)($item['subject'] ?? '')) . "\n\nMessage:\n" . trim((string)($item['message'] ?? '')),
+                    $adminEmail
+                );
+            } catch (Throwable $error) {
+                $item['adminEmailSent'] = false;
+                $item['adminEmailError'] = $error->getMessage();
+            }
+        }
+        $data[$key][] = $item;
+        save_data($dataFile, $data);
+        json_response(201, is_v1($path) ? ['data' => $item] : $item);
+    }
+}
+
+if (preg_match('#^/api/(?:v1/)?(contacts|enrollments|bookings|blogs|events)/(\\d+)(?:/(read))?$#', $path, $matches)) {
+    $key = $matches[1];
+    $id = (int) $matches[2];
+    foreach ($data[$key] ?? [] as $index => $item) {
+        if ((int)($item['id'] ?? 0) === $id) {
+            if ($method === 'DELETE') {
+                array_splice($data[$key], $index, 1);
+                save_data($dataFile, $data);
+                json_response(200, ['message' => 'Deleted successfully.']);
+            }
+            if (in_array($method, ['PUT', 'PATCH'], true)) {
+                $data[$key][$index] = array_merge($item, $body, ['updatedAt' => now_iso()]);
+                if (($matches[3] ?? '') === 'read') {
+                    $data[$key][$index]['read'] = true;
+                }
+                save_data($dataFile, $data);
+                json_response(200, is_v1($path) ? ['data' => $data[$key][$index]] : $data[$key][$index]);
+            }
+            json_response(200, is_v1($path) ? ['data' => $item] : $item);
+        }
+    }
+    json_response(404, ['message' => 'Not found.']);
+}
+
+if (($path === '/api/blogs/upload-image' || $path === '/api/v1/blogs/upload-image') && $method === 'POST') {
+    json_response(200, is_v1($path) ? ['data' => ['url' => '/blog-1.webp']] : ['url' => '/blog-1.webp']);
+}
+
+json_response(404, ['message' => 'API route not found.', 'path' => $path]);
