@@ -10,9 +10,11 @@
     if (!isHome() || Date.now() >= expiresAt) return remove();
     if (document.getElementById(id)) return true;
 
+    const main = document.querySelector('main') || document.querySelector('#root');
+    const hero = main?.querySelector('h1')?.closest('section') || main?.querySelector('section');
     const heading = [...document.querySelectorAll('h1, h2, h3')]
       .find(element => /Indian Carnatic music classes to help you discover the melody within/i.test(element.textContent || ''));
-    const anchor = heading?.closest('section') || heading?.parentElement;
+    const anchor = hero || heading?.closest('section') || heading?.parentElement;
     if (!anchor) return false;
 
     const section = document.createElement('section');
