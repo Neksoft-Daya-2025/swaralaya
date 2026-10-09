@@ -42,8 +42,8 @@
       #${id} .swarakshara-2026-image-wrap{overflow:hidden;border-radius:12px;background:#35140e}
       #${id} .swarakshara-2026-image-wrap img{display:block;width:100%;height:100%;min-height:340px;object-fit:cover}
       #${id} .swarakshara-2026-copy{max-width:800px}
-      #${id} .swarakshara-2026-kicker{margin:0 0 10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#f5c86b;font-size:.82rem}
-      #${id} h2{margin:0 0 18px;color:#fff;font-family:Georgia,'Times New Roman',serif;font-size:clamp(2rem,4vw,3.25rem);line-height:1.1}
+      #${id} .swarakshara-2026-kicker{margin:0 0 10px;font-family:Georgia,'Times New Roman',serif;font-weight:700;letter-spacing:.02em;color:#f5c86b;font-size:clamp(2.2rem,4.4vw,3.7rem);line-height:1.05;text-transform:none}
+      #${id} h2{margin:0 0 18px;color:#fff;font-family:Georgia,'Times New Roman',serif;font-size:clamp(1.35rem,2.4vw,2rem);line-height:1.2}
       #${id} p{margin:0 0 20px;font-size:1.05rem;line-height:1.75}
       #${id} ul{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 28px;padding:0;list-style:none}
       #${id} li{padding:12px 14px;border-left:3px solid #f5c86b;background:rgba(255,255,255,.1)}
