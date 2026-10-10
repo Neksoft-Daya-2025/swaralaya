@@ -56,7 +56,7 @@
     return true;
   }
 
-  const observer = new MutationObserver(() => { if (render()) observer.disconnect(); });
+  const observer = new MutationObserver(render);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   render();
   window.addEventListener('popstate', render);
