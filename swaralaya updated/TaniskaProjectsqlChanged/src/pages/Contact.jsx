@@ -196,7 +196,7 @@ export default function Contact() {
                         onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--primary)')}
                         onMouseLeave={(e) => (e.currentTarget.style.color = '#555555')}
                       >
-                        +31 6428 25268
+                        +31 6 42825268
                       </a>
                     </p>
                   </div>

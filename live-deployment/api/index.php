@@ -323,8 +323,8 @@ function default_settings_content(): array
         ],
         'contact' => [
             'email' => 'info@swaralayaschoolofmusic.nl',
-            'phone' => '+31 6428 25268',
-            'whatsapp' => '+31 6428 25268',
+            'phone' => '+31 6 42825268',
+            'whatsapp' => '+31 6 42825268',
             'address' => 'J J Slauerhoffstraat 63, 1321RA Almere, Netherlands.',
             'mapUrl' => '',
             'hours' => 'By appointment',
@@ -341,7 +341,7 @@ function default_settings_content(): array
             'about' => 'Indian Carnatic music classes to help you discover the melody within.',
             'copyright' => 'Copyright 2025, powered by Neksoft Consultancy Services',
             'contactEmail' => 'info@swaralayaschoolofmusic.nl',
-            'contactPhone' => '+31 6428 25268',
+            'contactPhone' => '+31 6 42825268',
             'address' => 'J J Slauerhoffstraat 63, 1321RA Almere, Netherlands.',
         ],
         'donation' => [
@@ -429,7 +429,7 @@ if ($path === '/api/v1/site' && $method === 'GET') {
             'site_name' => 'Swaralaya School of Music',
             'contact_email' => 'info@swaralayaschoolofmusic.nl',
             'from_email' => 'info@swaralayaschoolofmusic.nl',
-            'phone' => '+31 6428 25268',
+            'phone' => '+31 6 42825268',
             'address' => 'J J Slauerhoffstraat 63, 1321RA Almere, Netherlands.',
             'logo_url' => '/swaralaya-main-logo.png',
             'favicon_url' => '/favicon.png'

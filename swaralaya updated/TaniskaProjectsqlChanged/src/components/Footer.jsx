@@ -131,7 +131,7 @@ export default function Footer() {
                   onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
                   onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
                 >
-                  +31 6428 25268
+                  +31 6 42825268
                 </a>
               </div>
             </div>
